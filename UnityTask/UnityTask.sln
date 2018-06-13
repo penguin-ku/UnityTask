@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnityTask.Plugins", "UnityTask.Plugins.csproj", "{CFB8EBE8-6094-90ED-04F1-E807E57057DB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnityTask", "UnityTask.csproj", "{260DDE59-F96C-5F98-527B-6FA02BE5EA6F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CFB8EBE8-6094-90ED-04F1-E807E57057DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CFB8EBE8-6094-90ED-04F1-E807E57057DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CFB8EBE8-6094-90ED-04F1-E807E57057DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CFB8EBE8-6094-90ED-04F1-E807E57057DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{260DDE59-F96C-5F98-527B-6FA02BE5EA6F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{260DDE59-F96C-5F98-527B-6FA02BE5EA6F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{260DDE59-F96C-5F98-527B-6FA02BE5EA6F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{260DDE59-F96C-5F98-527B-6FA02BE5EA6F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
