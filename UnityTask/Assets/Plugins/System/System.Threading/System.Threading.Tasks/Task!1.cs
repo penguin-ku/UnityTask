@@ -1,6 +1,8 @@
 ﻿namespace System.Threading.Tasks
 {
     using System;
+    using System.Collections.Generic;
+    using System.Linq;
     using System.Threading;
 
     /// <summary>
@@ -9,11 +11,11 @@
     /// <typeparam name="T">The type of the task's result.</typeparam>
     public sealed class Task<T> : Task
     {
-        public new static Task None
+        public new static Task<T> None
         {
             get
             {
-                return Task.FromResult(default(T));
+                return Task.FromResult<T>(default(T));
             }
         }
 
@@ -81,13 +83,33 @@
         /// </summary>
         private void RunContinuations()
         {
-            lock (m_mutex)
+            if (!Thread.CurrentThread.IsBackground)// 如果在前台线程，则强制移至后台
             {
-                foreach (var continuation in m_continuations)
+                List<Action<Task>> continuations = null;
+                lock (m_mutex)
                 {
-                    continuation(this);
+                    continuations = m_continuations.ToList();
+                    m_continuations.Clear();
                 }
-                m_continuations.Clear();
+                // 扔到线程池
+                ThreadPool.QueueUserWorkItem(new WaitCallback(p =>
+                {
+                    foreach (var continuation in continuations)
+                    {
+                        continuation(this);
+                    }
+                }));
+            }
+            else
+            {
+                lock (m_mutex)
+                {
+                    foreach (var continuation in m_continuations)
+                    {
+                        continuation(this);
+                    }
+                    m_continuations.Clear();
+                }
             }
         }
 

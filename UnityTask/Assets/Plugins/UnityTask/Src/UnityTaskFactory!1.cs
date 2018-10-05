@@ -1,6 +1,7 @@
 ﻿namespace UnityEngine.TaskExtension
 {
     using System;
+    using System.Collections;
 
     /// <summary>
     /// Provides support for creating and scheduling Task<TResult> objects.
@@ -220,7 +221,7 @@
         /// <param name="p_tasks"></param>
         /// <param name="p_continuationAction"></param>
         /// <returns></returns>
-        public UnityTask<T> ContinueWhenAll<T>(UnityTask[] p_tasks, Func<UnityTask[], System.Collections.IEnumerator> p_continuationAction)
+        public UnityTask<UnityTask<T>> ContinueWhenAll<T>(UnityTask[] p_tasks, Func<UnityTask[], System.Collections.IEnumerator> p_continuationAction)
         {
             return m_factory.ContinueWhenAll<T>(p_tasks, p_continuationAction);
         }

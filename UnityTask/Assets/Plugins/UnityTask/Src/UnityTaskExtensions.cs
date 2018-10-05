@@ -102,7 +102,7 @@
         /// </summary>
         /// <typeparam name="TResult"></typeparam>
         /// <returns></returns>
-        private static UnityTask<IEnumerable<TResult>> EndForNull<TResult>()
+        public static UnityTask<IEnumerable<TResult>> EndForNull<TResult>()
         {
             UnityTaskCompletionSource<IEnumerable<TResult>> source = new UnityTaskCompletionSource<IEnumerable<TResult>>();
             source.SetResult(null);
@@ -115,151 +115,48 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        internal static void OnSuccess(this UnityTask p_task, Action<UnityTask> p_continuation)
+        public static UnityTask OnSuccess(this UnityTask p_task, Action<UnityTask> p_continuation)
         {
-            p_task.ContinueWith(t => 
+            UnityTaskCompletionSource<object> utcs = new UnityTaskCompletionSource<object>();
+
+            p_task.ContinueWith(t =>
             {
                 if (!t.IsFaulted && !t.IsCanceled)
                 {
                     p_continuation(t);
+                    utcs.TrySetResult(null);
+                }
+                else
+                {
+                    utcs.TrySetException(t.Exception);
                 }
             });
+            return utcs.Task;
         }
 
         /// <summary>
         /// OnSuccess
         /// </summary>
-        /// <typeparam name="TResult"></typeparam>
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        internal static UnityTask<TResult> OnSuccess<TResult>(this UnityTask p_task, Func<UnityTask, IEnumerator> p_continuation, CancellationToken p_cancel)
+        public static UnityTask<TResult> OnSuccess<TResult>(this UnityTask p_task, Func<UnityTask, TResult> p_continuation)
         {
-            return p_task.ContinueWith<TResult>(t =>
+            UnityTaskCompletionSource<TResult> utcs = new UnityTaskCompletionSource<TResult>();
+            p_task.ContinueWith(t =>
             {
                 if (!t.IsFaulted && !t.IsCanceled)
                 {
-                    return p_continuation(t);
+                    TResult result = p_continuation(t);
+                    utcs.TrySetResult(result);
                 }
                 else
                 {
-                    return FromResultCoroutine(default(TResult));
+                    utcs.TrySetException(t.Exception);
                 }
-            }, p_cancel);
-        }
+            });
 
-        /// <summary>
-        /// OnSuccess
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        internal static UnityTask<TResult> OnSuccess<TResult>(this UnityTask p_task, Func<UnityTask, IEnumerator> p_continuation)
-        {
-            return p_task.OnSuccess<TResult>(p_continuation, CancellationToken.None);
-        }
-
-        /// <summary>
-        /// OnSuccess
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        internal static UnityTask OnSuccess(this UnityTask p_task, Func<UnityTask, IEnumerator> p_continuation, CancellationToken p_cancel)
-        {
-            return p_task.ContinueWith(t =>
-            {
-                if (!t.IsFaulted && !t.IsCanceled)
-                {
-                    return p_continuation(t);
-                }
-                else
-                {
-                    return FromResultCoroutine();
-                }
-            }, p_cancel);
-        }
-
-        /// <summary>
-        /// OnSuccess
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        internal static UnityTask OnSuccess(this UnityTask p_task, Func<UnityTask, IEnumerator> p_continuation)
-        {
-            return p_task.OnSuccess(p_continuation, CancellationToken.None);
-        }
-
-        /// <summary>
-        /// OnSuccess
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        internal static UnityTask<TResult> OnSuccess<TResult>(this UnityTask p_task, Func<IEnumerator> p_continuation, CancellationToken p_cancel)
-        {
-            return p_task.ContinueWith<TResult>(t =>
-            {
-                if (!t.IsFaulted && !t.IsCanceled)
-                {
-                    return p_continuation();
-                }
-                else
-                {
-                    return FromResultCoroutine(default(TResult));
-                }
-            }, p_cancel);
-        }
-
-        /// <summary>
-        /// OnSuccess
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        internal static UnityTask<TResult> OnSuccess<TResult>(this UnityTask p_task, Func<IEnumerator> p_continuation)
-        {
-            return p_task.OnSuccess<TResult>(p_continuation, CancellationToken.None);
-        }
-
-        /// <summary>
-        /// OnSuccess
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        internal static UnityTask OnSuccess(this UnityTask p_task, Func<IEnumerator> p_continuation, CancellationToken p_cancel)
-        {
-            return p_task.ContinueWith(t =>
-            {
-                if (!t.IsFaulted && !t.IsCanceled)
-                {
-                    return p_continuation();
-                }
-                else
-                {
-                    return FromResultCoroutine();
-                }
-            }, p_cancel);
-        }
-
-        /// <summary>
-        /// OnSuccess
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        internal static UnityTask OnSuccess(this UnityTask p_task, Func<IEnumerator> p_continuation)
-        {
-            return p_task.OnSuccess(p_continuation, CancellationToken.None);
+            return utcs.Task;
         }
 
         /// <summary>
@@ -269,34 +166,22 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        internal static void OnSuccess<TIn>(this UnityTask<TIn> p_task, Action<UnityTask<TIn>> p_continuation)
+        public static UnityTask OnSuccess<TIn>(this UnityTask<TIn> p_task, Action<UnityTask<TIn>> p_continuation)
         {
-            p_task.OnSuccess((UnityTask t) => p_continuation((UnityTask<TIn>)t));
+            return p_task.OnSuccess((UnityTask t) => p_continuation((UnityTask<TIn>)t));
         }
 
         /// <summary>
         /// OnSuccess
         /// </summary>
-        /// <typeparam name="TIn"></typeparam>
-        /// <typeparam name="TResult"></typeparam>
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        internal static UnityTask<TResult> OnSuccess<TIn, TResult>(this UnityTask<TIn> p_task, Func<UnityTask<TIn>, IEnumerator> p_continuation)
+        public static UnityTask<TResult> OnSuccess<TIn, TResult>(this UnityTask<TIn> p_task, Func<UnityTask<TIn>, TResult> p_continuation)
         {
-            return p_task.OnSuccess<TResult>((UnityTask t) => p_continuation((UnityTask<TIn>)t));
+            return p_task.OnSuccess((UnityTask t) => p_continuation((UnityTask<TIn>)t));
         }
 
-
-        private static IEnumerator FromResultCoroutine<T>(T p_result)
-        {
-            yield return p_result;
-        }
-
-        private static IEnumerator FromResultCoroutine()
-        {
-            yield return null;
-        }
 
         /// <summary>
         /// switch to backgroud processor, thread pool
@@ -305,7 +190,7 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        public static Task<TResult> ContinueToBackground<TResult>(this UnityTask p_task, Func<TResult> p_continuation)
+        public static Task ContinueToBackground(this UnityTask p_task, Action<UnityTask> p_continuation)
         {
             return p_task.ContinueToBackground(p_continuation, CancellationToken.None);
         }
@@ -317,9 +202,9 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        public static Task<TResult> ContinueToBackground<TResult>(this UnityTask p_task, Func<TResult> p_continuation, CancellationToken p_cancellationToken)
+        public static Task ContinueToBackground(this UnityTask p_task, Action<UnityTask> p_continuation, CancellationToken p_cancellationToken)
         {
-            TaskCompletionSource<TResult> tcs = new TaskCompletionSource<TResult>();
+            TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
             var cancellation = p_cancellationToken.Register(() => tcs.TrySetCanceled());
             p_task.ContinueWith(t =>
             {
@@ -327,7 +212,8 @@
                 {
                     try
                     {
-                        tcs.SetResult(p_continuation());
+                        p_continuation(t);
+                        tcs.SetResult(null);
                         cancellation.Dispose();
                     }
                     catch (Exception e)
@@ -389,28 +275,9 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        public static Task ContinueToBackground(this UnityTask p_task, Action p_continuation, CancellationToken p_cancellationToken)
+        public static Task ContinueToBackground<T>(this UnityTask<T> p_task, Action<UnityTask<T>> p_continuation)
         {
-            TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
-            var cancellation = p_cancellationToken.Register(() => tcs.TrySetCanceled());
-            p_task.ContinueWith(t =>
-            {
-                TaskScheduler.FromCurrentSynchronizationContext().Post(() =>
-                {
-                    try
-                    {
-                        p_continuation();
-                        tcs.SetResult(null);
-                        cancellation.Dispose();
-                    }
-                    catch (Exception e)
-                    {
-                        tcs.SetException(e);
-                        cancellation.Dispose();
-                    }
-                });
-            });
-            return tcs.Task;
+            return ContinueToBackground(p_task, p_continuation, CancellationToken.None);
         }
 
         /// <summary>
@@ -420,19 +287,7 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        public static Task ContinueToBackground(this UnityTask p_task, Action p_continuation)
-        {
-            return p_task.ContinueToBackground(p_continuation, CancellationToken.None);
-        }
-
-        /// <summary>
-        /// switch to backgroud processor, thread pool
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        public static Task ContinueToBackground(this UnityTask p_task, Action<UnityTask> p_continuation, CancellationToken p_cancellationToken)
+        public static Task ContinueToBackground<T>(this UnityTask<T> p_task, Action<UnityTask<T>> p_continuation, CancellationToken p_cancellationToken)
         {
             TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
             var cancellation = p_cancellationToken.Register(() => tcs.TrySetCanceled());
@@ -463,80 +318,9 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        public static Task ContinueToBackground(this UnityTask p_task, Action<UnityTask> p_continuation)
+        public static Task<TResult> ContinueToBackground<T, TResult>(this UnityTask<T> p_task, Func<UnityTask<T>, TResult> p_continuation)
         {
-            return p_task.ContinueToBackground(p_continuation, CancellationToken.None);
-        }
-
-        /// <summary>
-        /// switch to backgroud processor, ForegroundInvoker
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        public static void ContinueToForeground(this Task p_task, Action p_continuation)
-        {
-            p_task.ContinueWith(t =>
-            {
-                UnityEngine.Processor.ForegroundInvoker.Invoke(() =>
-                {
-                    p_continuation();
-                });
-            });
-        }
-
-        /// <summary>
-        /// switch to backgroud processor, ForegroundInvoker
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        public static void ContinueToForeground(this Task p_task, Action<Task> p_continuation)
-        {
-            p_task.ContinueWith(t =>
-            {
-                UnityEngine.Processor.ForegroundInvoker.Invoke(() =>
-                {
-                    p_continuation(t);
-                });
-            });
-        }
-
-        /// <summary>
-        /// switch to backgroud processor, ForegroundInvoker
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        public static UnityTask<TResult> ContinueToForeground<TResult>(this Task p_task, Func<IEnumerator> p_continuation, CancellationToken p_cancellationToken)
-        {
-            UnityTaskCompletionSource<TResult> tcs = new UnityTaskCompletionSource<TResult>();
-            var cancellation = p_cancellationToken.Register(() => tcs.TrySetCanceled());
-            tcs.Task.TaskGenerator = p_continuation;
-            tcs.Task.ReturnResult = p =>
-            {
-                try
-                {
-                    tcs.SetResult((TResult)p);
-                    cancellation.Dispose();
-                }
-                catch (Exception e)
-                {
-                    tcs.SetException(e);
-                    cancellation.Dispose();
-                }
-            };
-            p_task.ContinueWith(t =>
-            {
-                UnityEngine.Processor.ForegroundInvoker.Invoke(() =>
-                {
-                    UnityTaskScheduler.FromCurrentSynchronizationContext().Post(tcs.Task.TaskGenerator(), tcs.Task.ReturnResult);
-                });
-            });
-            return tcs.Task;
+            return ContinueToBackground(p_task, p_continuation, CancellationToken.None);
         }
 
         /// <summary>
@@ -546,58 +330,281 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        public static UnityTask<TResult> ContinueToForeground<TResult>(this Task p_task, Func<IEnumerator> p_continuation)
+        public static Task<TResult> ContinueToBackground<T, TResult>(this UnityTask<T> p_task, Func<UnityTask<T>, TResult> p_continuation, CancellationToken p_cancellationToken)
         {
-            return p_task.ContinueToForeground<TResult>(p_continuation, CancellationToken.None);
-        }
-
-        /// <summary>
-        /// switch to backgroud processor, ForegroundInvoker
-        /// </summary>
-        /// <typeparam name="TResult"></typeparam>
-        /// <param name="p_task"></param>
-        /// <param name="p_continuation"></param>
-        /// <returns></returns>
-        public static UnityTask<TResult> ContinueToForeground<TResult>(this Task p_task, Func<Task, IEnumerator> p_continuation, CancellationToken p_cancellationToken)
-        {
-            UnityTaskCompletionSource<TResult> tcs = new UnityTaskCompletionSource<TResult>();
+            TaskCompletionSource<TResult> tcs = new TaskCompletionSource<TResult>();
             var cancellation = p_cancellationToken.Register(() => tcs.TrySetCanceled());
-            tcs.Task.TaskGenerator = () => p_continuation(p_task);
-            tcs.Task.ReturnResult = p =>
-            {
-                try
-                {
-                    tcs.SetResult((TResult)p);
-                    cancellation.Dispose();
-                }
-                catch (Exception e)
-                {
-                    tcs.SetException(e);
-                    cancellation.Dispose();
-                }
-            };
-
             p_task.ContinueWith(t =>
             {
-                UnityEngine.Processor.ForegroundInvoker.Invoke(() =>
+                TaskScheduler.FromCurrentSynchronizationContext().Post(() =>
                 {
-                    UnityTaskScheduler.FromCurrentSynchronizationContext().Post(tcs.Task.TaskGenerator(), tcs.Task.ReturnResult);
+                    try
+                    {
+                        tcs.SetResult(p_continuation(t));
+                        cancellation.Dispose();
+                    }
+                    catch (Exception e)
+                    {
+                        tcs.SetException(e);
+                        cancellation.Dispose();
+                    }
                 });
-
             });
             return tcs.Task;
         }
 
         /// <summary>
-        /// switch to backgroud processor, ForegroundInvoker
+        /// 作为后台线程
+        /// </summary>
+        /// <param name="p_task"></param>
+        /// <returns></returns>
+        public static Task AsBackground(this UnityTask p_task)
+        {
+            return p_task.ContinueToBackground(t =>
+            {
+                if (t.IsFaulted)
+                {
+                    return Task.FromException(t.Exception);
+                }
+                else
+                {
+                    return Task.FromResult(0);
+                }
+            }).Unwrap();
+        }
+
+        /// <summary>
+        /// 作为后台线程
+        /// </summary>
+        /// <param name="p_task"></param>
+        /// <returns></returns>
+        public static Task<T> AsBackground<T>(this UnityTask<T> p_task)
+        {
+            return p_task.ContinueToBackground(t =>
+            {
+                if (t.IsFaulted)
+                {
+                    return Task.FromException<T>(t.Exception);
+                }
+                else
+                {
+                    return Task.FromResult(t.Result);
+                }
+            }).Unwrap();
+        }
+
+        /// <summary>
+        ///  switch to foreground processor, UnityTask
         /// </summary>
         /// <typeparam name="TResult"></typeparam>
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        public static UnityTask<TResult> ContinueToForeground<TResult>(this Task p_task, Func<Task, IEnumerator> p_continuation)
+        public static UnityTask ContinueToForeground(this Task p_task, Action<Task> p_continuation)
         {
-            return p_task.ContinueToForeground<TResult>(p_continuation, CancellationToken.None);
+            return ContinueToForeground(p_task, p_continuation, CancellationToken.None);
         }
+
+        /// <summary>
+        ///  switch to foreground processor, UnityTask
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="p_task"></param>
+        /// <param name="p_continuation"></param>
+        /// <returns></returns>
+        public static UnityTask ContinueToForeground(this Task p_task, Action<Task> p_continuation, CancellationToken p_cancellationToken)
+        {
+            UnityTaskCompletionSource<int> utcs = new UnityTaskCompletionSource<int>();
+            var cancellation = p_cancellationToken.Register(() => utcs.TrySetCanceled());
+            p_task.ContinueWith(t =>
+            {
+                UnityEngine.Processor.ForegroundInvoker.Invoke(() =>
+                {
+                    try
+                    {
+                        p_continuation(t);
+                        utcs.TrySetResult(0);
+                        cancellation.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        utcs.TrySetException(ex);
+                        cancellation.Dispose();
+                    }
+
+                });
+            });
+            return utcs.Task;
+        }
+
+        /// <summary>
+        /// switch to foreground processor, UnityTask
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="p_task"></param>
+        /// <param name="p_continuation"></param>
+        /// <returns></returns>
+        public static UnityTask<TResult> ContinueToForeground<TResult>(this Task p_task, Func<Task, TResult> p_continuation)
+        {
+            return ContinueToForeground(p_task, p_continuation, CancellationToken.None);
+        }
+
+        /// <summary>
+        /// switch to foreground processor, UnityTask
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="p_task"></param>
+        /// <param name="p_continuation"></param>
+        /// <returns></returns>
+        public static UnityTask<TResult> ContinueToForeground<TResult>(this Task p_task, Func<Task, TResult> p_continuation, CancellationToken p_cancellationToken)
+        {
+            UnityTaskCompletionSource<TResult> utcs = new UnityTaskCompletionSource<TResult>();
+            var cancellation = p_cancellationToken.Register(() => utcs.TrySetCanceled());
+            p_task.ContinueWith(t =>
+            {
+                UnityEngine.Processor.ForegroundInvoker.Invoke(() =>
+                {
+                    try
+                    {
+                        var result = p_continuation(t);
+                        utcs.TrySetResult(result);
+                        cancellation.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        utcs.TrySetException(ex);
+                        cancellation.Dispose();
+                    }
+                });
+            });
+            return utcs.Task;
+        }
+
+        /// <summary>
+        ///  switch to foreground processor, UnityTask
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="p_task"></param>
+        /// <param name="p_continuation"></param>
+        /// <returns></returns>
+        public static UnityTask ContinueToForeground<T>(this Task<T> p_task, Action<Task<T>> p_continuation)
+        {
+            return ContinueToForeground(p_task, p_continuation, CancellationToken.None);
+        }
+
+        /// <summary>
+        ///  switch to foreground processor, UnityTask
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="p_task"></param>
+        /// <param name="p_continuation"></param>
+        /// <returns></returns>
+        public static UnityTask ContinueToForeground<T>(this Task<T> p_task, Action<Task<T>> p_continuation, CancellationToken p_cancellationToken)
+        {
+            UnityTaskCompletionSource<int> utcs = new UnityTaskCompletionSource<int>();
+            var cancellation = p_cancellationToken.Register(() => utcs.TrySetCanceled());
+            p_task.ContinueWith(t =>
+            {
+                UnityEngine.Processor.ForegroundInvoker.Invoke(() =>
+                {
+                    try
+                    {
+                        p_continuation(t);
+                        utcs.TrySetResult(0);
+                        cancellation.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        utcs.TrySetException(ex);
+                        cancellation.Dispose();
+                    }
+                });
+            });
+            return utcs.Task;
+        }
+
+        /// <summary>
+        /// switch to foreground processor, UnityTask
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="p_task"></param>
+        /// <param name="p_continuation"></param>
+        /// <returns></returns>
+        public static UnityTask<TResult> ContinueToForeground<T, TResult>(this Task<T> p_task, Func<Task<T>, TResult> p_continuation)
+        {
+            return ContinueToForeground(p_task, p_continuation, CancellationToken.None);
+        }
+
+        /// <summary>
+        /// switch to foreground processor, UnityTask
+        /// </summary>
+        /// <typeparam name="TResult"></typeparam>
+        /// <param name="p_task"></param>
+        /// <param name="p_continuation"></param>
+        /// <returns></returns>
+        public static UnityTask<TResult> ContinueToForeground<T, TResult>(this Task<T> p_task, Func<Task<T>, TResult> p_continuation, CancellationToken p_cancellationToken)
+        {
+            UnityTaskCompletionSource<TResult> utcs = new UnityTaskCompletionSource<TResult>();
+            var cancellation = p_cancellationToken.Register(() => utcs.TrySetCanceled());
+            p_task.ContinueWith(t =>
+            {
+                UnityEngine.Processor.ForegroundInvoker.Invoke(() =>
+                {
+                    try
+                    {
+                        var result = p_continuation(t);
+                        utcs.TrySetResult(result);
+                        cancellation.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        utcs.TrySetException(ex);
+                        cancellation.Dispose();
+                    }
+                });
+            });
+            return utcs.Task;
+        }
+
+        /// <summary>
+        /// 作为后台线程
+        /// </summary>
+        /// <param name="p_task"></param>
+        /// <returns></returns>
+        public static UnityTask AsForeground(this Task p_task)
+        {
+            return p_task.ContinueToForeground(t =>
+            {
+                if (t.IsFaulted)
+                {
+                    return UnityTask.FromException<int>(t.Exception);
+                }
+                else
+                {
+                    return UnityTask.FromResult(0);
+                }
+            }).Unwrap();
+        }
+
+        /// <summary>
+        /// 作为后台线程
+        /// </summary>
+        /// <param name="p_task"></param>
+        /// <returns></returns>
+        public static UnityTask<T> AsForeground<T>(this Task<T> p_task)
+        {
+            return p_task.ContinueToForeground(t =>
+            {
+                if (t.IsFaulted)
+                {
+                    return UnityTask.FromException<T>(t.Exception);
+                }
+                else
+                {
+                    return UnityTask.FromResult(t.Result);
+                }
+            }).Unwrap();
+        }
+
     }
 }

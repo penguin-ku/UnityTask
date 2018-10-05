@@ -7,17 +7,27 @@
     using System.Threading;
     using System.Threading.Tasks;
     using UnityEngine;
+    using UnityEngine.Processor;
 
     /// <summary>
     /// Represents an asynchronous task.
     /// </summary>
     public abstract class UnityTask
     {
+        public static UnityTask None
+        {
+            get
+            {
+                return UnityTask.FromResult(default(int));
+            }
+        }
+
         #region protected members
 
         protected List<Action<UnityTask>> m_continuationActions = new List<Action<UnityTask>>();
-        protected List<UnityTask> m_continuationTasks = new List<UnityTask>();
+
         protected System.Threading.Tasks.AggregateException m_exception;
+
         protected bool m_isCompleted;
         protected bool m_isCanceled;
 
@@ -109,84 +119,9 @@
         /// The function takes the completed task as an argument and can return a value.</param>
         /// <returns>A new Task that returns the value returned by the continuation after both
         /// the task and the continuation are complete.</returns>
-        public void ContinueWith(Action<UnityTask> p_continuation)
+        public UnityTask ContinueWith(Action<UnityTask> p_continuation)
         {
-            bool completed = false;
-            // 此处防止判断为false之后正好执行完毕
-            completed = IsCompleted;
-            if (!completed)
-            {
-                m_continuationActions.Add(p_continuation);
-            }
-            else
-            {
-                p_continuation(this);
-            }
-        }
-
-        /// <summary>
-        /// Registers a continuation for the task that will run when the task is complete.
-        /// </summary>
-        /// <typeparam name="TResult">The type returned by the continuation.</typeparam>
-        /// <param name="p_continuation">The continuation to run after the task completes.
-        /// The function takes the completed task as an argument and can return a value.</param>
-        /// <returns>A new Task that returns the value returned by the continuation after both
-        /// the task and the continuation are complete.</returns>
-        public UnityTask<TResult> ContinueWith<TResult>(Func<UnityTask, IEnumerator> p_continuation)
-        {
-            return ContinueWith<TResult>(p_continuation, CancellationToken.None);
-        }
-
-        /// <summary>
-        /// Registers a continuation for the task that will run when the task is complete.
-        /// </summary>
-        /// <typeparam name="TResult">The type returned by the continuation.</typeparam>
-        /// <param name="p_continuation">The continuation to run after the task completes.
-        /// The function takes the completed task as an argument and can return a value.</param>
-        /// <returns>A new Task that returns the value returned by the continuation after both
-        /// the task and the continuation are complete.</returns>
-        public UnityTask<TResult> ContinueWith<TResult>(Func<IEnumerator> p_continuation)
-        {
-            return ContinueWith<TResult>(_ => p_continuation(), System.Threading.Tasks.CancellationToken.None);
-        }
-
-        /// <summary>
-        /// Registers a continuation for the task that will run when the task is complete.
-        /// </summary>
-        /// <typeparam name="TResult">The type returned by the continuation.</typeparam>
-        /// <param name="p_continuation">The continuation to run after the task completes.
-        /// The function takes the completed task as an argument and can return a value.</param>
-        /// <returns>A new Task that returns the value returned by the continuation after both
-        /// the task and the continuation are complete.</returns>
-        public UnityTask<TResult> ContinueWith<TResult>(Func<UnityTask<TResult>> p_continuation)
-        {
-            return ContinueWith<TResult>(_ => p_continuation());
-        }
-
-        /// <summary>
-        /// Registers a continuation for the task that will run when the task is complete.
-        /// </summary>
-        /// <typeparam name="TResult">The type returned by the continuation.</typeparam>
-        /// <param name="p_continuation">The continuation to run after the task completes.
-        /// The function takes the completed task as an argument and can return a value.</param>
-        /// <returns>A new Task that returns the value returned by the continuation after both
-        /// the task and the continuation are complete.</returns>
-        public UnityTask ContinueWith(Func<IEnumerator> p_continuation)
-        {
-            return ContinueWith(_ => p_continuation(), System.Threading.Tasks.CancellationToken.None);
-        }
-
-        /// <summary>
-        /// Registers a continuation for the task that will run when the task is complete.
-        /// </summary>
-        /// <typeparam name="TResult">The type returned by the continuation.</typeparam>
-        /// <param name="p_continuation">The continuation to run after the task completes.
-        /// The function takes the completed task as an argument and can return a value.</param>
-        /// <returns>A new Task that returns the value returned by the continuation after both
-        /// the task and the continuation are complete.</returns>
-        public UnityTask ContinueWith(Func<UnityTask> p_continuation)
-        {
-            return ContinueWith(_ => p_continuation());
+            return ContinueWith(p_continuation, System.Threading.Tasks.CancellationToken.None);
         }
 
         /// <summary>
@@ -197,7 +132,61 @@
         /// The function takes the completed task as an argument and can return a value.</param>
         /// <returns>A new Task that returns the value returned by the continuation after both
         /// the task and the continuation are complete.</returns>
-        public UnityTask ContinueWith(Func<UnityTask, IEnumerator> p_continuation)
+        public UnityTask ContinueWith(Action<UnityTask> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
+        {
+            bool completed = false;
+
+            UnityTaskCompletionSource<int> utcs = new UnityTaskCompletionSource<int>();
+            CancellationTokenRegistration cancelToken = p_cancellationToken.Register(() => utcs.TrySetCanceled());
+            // 此处防止判断为false之后正好执行完毕
+            completed = IsCompleted;
+            if (!completed)
+            {
+                m_continuationActions.Add(t =>
+                {
+                    try
+                    {
+                        p_continuation(this);
+                        utcs.TrySetResult(0);
+                        cancelToken.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        utcs.TrySetException(ex);
+                        cancelToken.Dispose();
+                    }
+                });
+            }
+            else
+            {
+                ForegroundInvoker.Invoke(() =>// 如果当前不在前端线程，则切换
+                {
+                    try
+                    {
+                        p_continuation(this);
+                        utcs.TrySetResult(0);
+                        cancelToken.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        utcs.TrySetException(ex);
+                        cancelToken.Dispose();
+                    }
+                });
+            }
+
+            return utcs.Task;
+        }
+
+        /// <summary>
+        /// Registers a continuation for the task that will run when the task is complete.
+        /// </summary>
+        /// <typeparam name="TResult">The type returned by the continuation.</typeparam>
+        /// <param name="p_continuation">The continuation to run after the task completes.
+        /// The function takes the completed task as an argument and can return a value.</param>
+        /// <returns>A new Task that returns the value returned by the continuation after both
+        /// the task and the continuation are complete.</returns>
+        public UnityTask<UnityTask<TResult>> ContinueWith<TResult>(Func<UnityTask, UnityTask<TResult>> p_continuation)
         {
             return ContinueWith(p_continuation, System.Threading.Tasks.CancellationToken.None);
         }
@@ -211,82 +200,197 @@
         /// <param name="p_cancellationToken">The cancellation token.</param>
         /// <returns>A new Task that returns the value returned by the continuation after both
         /// the task and the continuation are complete.</returns>
-        public UnityTask<TResult> ContinueWith<TResult>(Func<UnityTask, IEnumerator> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
+        public UnityTask<UnityTask<TResult>> ContinueWith<TResult>(Func<UnityTask, UnityTask<TResult>> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
         {
             bool completed = false;
-            var tcs = new UnityTaskCompletionSource<TResult>();
-            var cancellation = p_cancellationToken.Register(() => tcs.TrySetCanceled());
-            tcs.Task.TaskGenerator = () => p_continuation(this);
-            tcs.Task.ReturnResult = p => 
+
+            UnityTaskCompletionSource<UnityTask<TResult>> utcs = new UnityTaskCompletionSource<UnityTask<TResult>>();
+            CancellationTokenRegistration cancelToken = p_cancellationToken.Register(() => utcs.TrySetCanceled());
+            // 此处防止判断为false之后正好执行完毕
+            completed = IsCompleted;
+            if (!completed)
             {
-                try
+                m_continuationActions.Add(t =>
                 {
-                    tcs.TrySetResult((TResult)p);
-                    cancellation.Dispose();
-                }
-                catch (Exception e)
+                    //if (t.IsFaulted)
+                    //{
+                    //    utcs.TrySetException(t.Exception);
+                    //    cancelToken.Dispose();
+                    //}
+                    //else
+                    //{
+                    try
+                    {
+                        UnityTask<TResult> result = p_continuation(t);
+                        utcs.TrySetResult(result);
+                        cancelToken.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        utcs.TrySetException(ex);
+                        cancelToken.Dispose();
+                    }
+                    //}
+                });
+            }
+            else
+            {
+                ForegroundInvoker.Invoke(() =>// 如果当前不在前端线程，则切换
                 {
-                    tcs.TrySetException(e);
-                    cancellation.Dispose();
-                }
+                    //if (this.IsFaulted)
+                    //{
+                    //    utcs.TrySetException(this.Exception);
+                    //    cancelToken.Dispose();
+                    //}
+                    //else
+                    //{
+                    try
+                    {
+                        UnityTask<TResult> result = p_continuation(this);
+                        utcs.TrySetResult(result);
+                        cancelToken.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        utcs.TrySetException(ex);
+                        cancelToken.Dispose();
+                    }
+                    //}
+                });
+            }
+
+            return utcs.Task;
+        }
+
+        /// <summary>
+        /// Registers a continuation for the task that will run when the task is complete.
+        /// </summary>
+        /// <typeparam name="T">The type returned by the continuation.</typeparam>
+        /// <param name="p_continuation">The continuation to run after the task completes.
+        /// The function takes the completed task as an argument and can return a value.</param>
+        /// <param name="p_cancellationToken">The cancellation token.</param>
+        /// <returns>A new Task that returns the value returned by the continuation after both
+        /// the task and the continuation are complete.</returns>
+        public UnityTask<UnityTask> ContinueWith(Func<UnityTask, UnityTask> p_continuation)
+        {
+            return ContinueWith(p_continuation, System.Threading.Tasks.CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Registers a continuation for the task that will run when the task is complete.
+        /// </summary>
+        /// <typeparam name="T">The type returned by the continuation.</typeparam>
+        /// <param name="p_continuation">The continuation to run after the task completes.
+        /// The function takes the completed task as an argument and can return a value.</param>
+        /// <param name="p_cancellationToken">The cancellation token.</param>
+        /// <returns>A new Task that returns the value returned by the continuation after both
+        /// the task and the continuation are complete.</returns>
+        public UnityTask<UnityTask> ContinueWith(Func<UnityTask, UnityTask> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
+        {
+            bool completed = false;
+
+            UnityTaskCompletionSource<UnityTask> utcs = new UnityTaskCompletionSource<UnityTask>();
+            CancellationTokenRegistration cancelToken = p_cancellationToken.Register(() => utcs.TrySetCanceled());
+            // 此处防止判断为false之后正好执行完毕
+            completed = IsCompleted;
+            if (!completed)
+            {
+                m_continuationActions.Add(t =>
+                {
+                    //if (t.IsFaulted)
+                    //{
+                    //    utcs.TrySetException(t.Exception);
+                    //    cancelToken.Dispose();
+                    //}
+                    //else
+                    //{
+                        try
+                        {
+                            UnityTask result = p_continuation(t);
+                            utcs.TrySetResult(result);
+                            cancelToken.Dispose();
+                        }
+                        catch (Exception ex)
+                        {
+                            utcs.TrySetException(ex);
+                            cancelToken.Dispose();
+                        }
+                    //}
+                });
+            }
+            else
+            {
+                ForegroundInvoker.Invoke(() =>
+                {
+                    //if (this.IsFaulted)
+                    //{
+                    //    utcs.TrySetException(this.Exception);
+                    //    cancelToken.Dispose();
+                    //}
+                    //else
+                    //{
+                        try
+                        {
+                            UnityTask result = p_continuation(this);
+                            utcs.TrySetResult(result);
+                            cancelToken.Dispose();
+                        }
+                        catch (Exception ex)
+                        {
+                            utcs.TrySetException(ex);
+                            cancelToken.Dispose();
+                        }
+                    //}
+                });
+            }
+
+            return utcs.Task;
+        }
+
+        /// <summary>
+        /// Registers a continuation for the task that will run when the task is complete.
+        /// </summary>
+        /// <typeparam name="T">The type returned by the continuation.</typeparam>
+        /// <param name="p_continuation">The continuation to run after the task completes.
+        /// The function takes the completed task as an argument and can return a value.</param>
+        /// <returns>A new Task that returns the value returned by the continuation after both
+        /// the task and the continuation are complete.</returns>
+        public UnityTask<UnityTask<TResult>> ContinueWith<TResult>(Func<UnityTask, IEnumerator> p_continuation)
+        {
+            return ContinueWith<TResult>(p_continuation, System.Threading.Tasks.CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Registers a continuation for the task that will run when the task is complete.
+        /// </summary>
+        /// <typeparam name="T">The type returned by the continuation.</typeparam>
+        /// <param name="p_continuation">The continuation to run after the task completes.
+        /// The function takes the completed task as an argument and can return a value.</param>
+        /// <param name="p_cancellationToken">The cancellation token.</param>
+        /// <returns>A new Task that returns the value returned by the continuation after both
+        /// the task and the continuation are complete.</returns>
+        public UnityTask<UnityTask<TResult>> ContinueWith<TResult>(Func<UnityTask, IEnumerator> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
+        {
+            Func<UnityTask, UnityTask<TResult>> continuation = t =>
+            {
+                return UnityTask.Run<TResult>(() => p_continuation(t));
             };
 
-            // 此处防止判断为false之后正好执行完毕
-            completed = IsCompleted;
-            if (!completed)
-            {
-                m_continuationTasks.Add(tcs.Task);
-            }
-            else
-            {
-                IEnumerator enumerator = tcs.Task.TaskGenerator();
-                tcs.Task.TaskCoroutine = UnityTaskScheduler.FromCurrentSynchronizationContext().Post(enumerator, tcs.Task.ReturnResult);
-            }
-
-            return tcs.Task;
+            return ContinueWith(continuation, p_cancellationToken);
         }
 
         /// <summary>
         /// Registers a continuation for the task that will run when the task is complete.
         /// </summary>
-        /// <typeparam name="TResult">The type returned by the continuation.</typeparam>
+        /// <typeparam name="T">The type returned by the continuation.</typeparam>
         /// <param name="p_continuation">The continuation to run after the task completes.
         /// The function takes the completed task as an argument and can return a value.</param>
-        /// <param name="p_cancellationToken">The cancellation token.</param>
         /// <returns>A new Task that returns the value returned by the continuation after both
         /// the task and the continuation are complete.</returns>
-        public UnityTask<TResult> ContinueWith<TResult>(Func<UnityTask, UnityTask<TResult>> p_continuation)
+        public UnityTask<UnityTask> ContinueWith(Func<UnityTask, IEnumerator> p_continuation)
         {
-            bool completed = false;
-            UnityTask<TResult> task = p_continuation(this);
+            return ContinueWith(p_continuation, System.Threading.Tasks.CancellationToken.None);
 
-            // 此处防止判断为false之后正好执行完毕
-            completed = IsCompleted;
-            if (!completed)
-            {
-                m_continuationTasks.Add(task);
-            }
-            else
-            {
-                IEnumerator enumerator = task.TaskGenerator();
-                task.TaskCoroutine = UnityTaskScheduler.FromCurrentSynchronizationContext().Post(enumerator, task.ReturnResult);
-            }
-
-            return task;
-        }
-
-        /// <summary>
-        /// Registers a continuation for the task that will run when the task is complete.
-        /// </summary>
-        /// <typeparam name="TResult">The type returned by the continuation.</typeparam>
-        /// <param name="p_continuation">The continuation to run after the task completes.
-        /// The function takes the completed task as an argument and can return a value.</param>
-        /// <param name="p_cancellationToken">The cancellation token.</param>
-        /// <returns>A new Task that returns the value returned by the continuation after both
-        /// the task and the continuation are complete.</returns>
-        public UnityTask<TResult> ContinueWith<TResult>(Func<IEnumerator> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
-        {
-            return ContinueWith<TResult>(t => p_continuation(), p_cancellationToken);
         }
 
         /// <summary>
@@ -298,107 +402,62 @@
         /// <param name="p_cancellationToken">The cancellation token.</param>
         /// <returns>A new Task that returns the value returned by the continuation after both
         /// the task and the continuation are complete.</returns>
-        public UnityTask ContinueWith(Func<UnityTask, IEnumerator> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
+        public UnityTask<UnityTask> ContinueWith(Func<UnityTask, IEnumerator> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
         {
-            bool completed = false;
-            var tcs = new UnityTaskCompletionSource<object>();
-            var cancellation = p_cancellationToken.Register(() => tcs.TrySetCanceled());
-            tcs.Task.TaskGenerator = () => p_continuation(this);
-            tcs.Task.ReturnResult = p =>
+            Func<UnityTask, UnityTask> continuation = t =>
             {
-                try
-                {
-                    tcs.TrySetResult(p);
-                    cancellation.Dispose();
-                }
-                catch (Exception e)
-                {
-                    tcs.TrySetException(e);
-                    cancellation.Dispose();
-                }
+                return UnityTask.Run(() => p_continuation(t));
             };
 
-            // 此处防止判断为false之后正好执行完毕
-            completed = IsCompleted;
-            if (!completed)
-            {
-                m_continuationTasks.Add(tcs.Task);
-            }
-            else
-            {
-                IEnumerator enumerator = tcs.Task.TaskGenerator();
-                tcs.Task.TaskCoroutine = UnityTaskScheduler.FromCurrentSynchronizationContext().Post(enumerator, tcs.Task.ReturnResult);
-            }
-
-            return tcs.Task;
-        }
-
-        /// <summary>
-        /// Registers a continuation for the task that will run when the task is complete.
-        /// </summary>
-        /// <typeparam name="T">The type returned by the continuation.</typeparam>
-        /// <param name="p_continuation">The continuation to run after the task completes.
-        /// The function takes the completed task as an argument and can return a value.</param>
-        /// <param name="p_cancellationToken">The cancellation token.</param>
-        /// <returns>A new Task that returns the value returned by the continuation after both
-        /// the task and the continuation are complete.</returns>
-        public UnityTask ContinueWith(Func<UnityTask, UnityTask> p_continuation)
-        {
-            bool completed = false;
-            UnityTask task = p_continuation(this);
-
-            // 此处防止判断为false之后正好执行完毕
-            completed = IsCompleted;
-            if (!completed)
-            {
-                m_continuationTasks.Add(task);
-            }
-            else
-            {
-                IEnumerator enumerator = task.TaskGenerator();
-                task.TaskCoroutine = UnityTaskScheduler.FromCurrentSynchronizationContext().Post(enumerator, task.ReturnResult);
-            }
-
-            return task;
-        }
-
-        /// <summary>
-        /// Registers a continuation for the task that will run when the task is complete.
-        /// </summary>
-        /// <typeparam name="T">The type returned by the continuation.</typeparam>
-        /// <param name="p_continuation">The continuation to run after the task completes.
-        /// The function takes the completed task as an argument and can return a value.</param>
-        /// <param name="p_cancellationToken">The cancellation token.</param>
-        /// <returns>A new Task that returns the value returned by the continuation after both
-        /// the task and the continuation are complete.</returns>
-        public UnityTask ContinueWith(Func<IEnumerator> p_continuation, System.Threading.Tasks.CancellationToken p_cancellationToken)
-        {
-            return ContinueWith(t=> p_continuation(), p_cancellationToken);
-        }
-
-        /// <summary>
-        /// Creates a task that will complete successfully after the given timespan.
-        /// </summary>
-        /// <param name="p_timespan">The amount of time to wait.</param>
-        /// <returns>A new task.</returns>
-        public UnityTask Delay(float p_seconds, CancellationToken p_cancellationToken)
-        {
-            return ContinueWith(() => DelayCoroutine(p_seconds), p_cancellationToken);
-        }
-
-        /// <summary>
-        /// Creates a task that will complete successfully after the given timespan.
-        /// </summary>
-        /// <param name="p_timespan">The amount of time to wait.</param>
-        /// <returns>A new task.</returns>
-        public UnityTask Delay(float p_seconds)
-        {
-            return ContinueWith(() => DelayCoroutine(p_seconds), CancellationToken.None);
+            return ContinueWith(continuation, p_cancellationToken);
         }
 
         #endregion
 
         #region static public functions
+
+        /// <summary>
+        /// Executes a function asynchronously, returning a task that represents the operation.
+        /// </summary>
+        /// <typeparam name="T">The return type of the task.</typeparam>
+        /// <param name="p_toRun">The function to run.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public static UnityTask Run(Action p_action)
+        {
+            return UnityTask.FromResult(0).ContinueWith(t => p_action());
+        }
+
+        /// <summary>
+        /// Executes a function asynchronously, returning a task that represents the operation.
+        /// </summary>
+        /// <typeparam name="T">The return type of the task.</typeparam>
+        /// <param name="p_toRun">The function to run.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public static UnityTask<T> Run<T>(Func<T> p_action)
+        {
+            return UnityTask.FromResult(0).ContinueWith(t => p_action());
+        }
+
+        /// <summary>
+        /// Executes a function asynchronously, returning a task that represents the operation.
+        /// </summary>
+        /// <typeparam name="T">The return type of the task.</typeparam>
+        /// <param name="p_toRun">The function to run.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public static UnityTask<T> Run<T>(Func<IEnumerator> p_toRun)
+        {
+            return UnityTask.Factory.StartNew<T>(p_toRun);
+        }
+
+        /// <summary>
+        /// Executes an action asynchronously, returning a task that represents the operation.
+        /// </summary>
+        /// <param name="p_toRun">The action to run.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public static UnityTask Run(Func<IEnumerator> p_toRun)
+        {
+            return UnityTask.Factory.StartNew<object>(p_toRun);
+        }
 
         /// <summary>
         /// Creates a task that is complete when all of the provided tasks are complete.
@@ -500,24 +559,16 @@
         }
 
         /// <summary>
-        /// Executes a function asynchronously, returning a task that represents the operation.
+        /// Creates a new, completed task for the given result.
         /// </summary>
-        /// <typeparam name="T">The return type of the task.</typeparam>
-        /// <param name="p_toRun">The function to run.</param>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        public static UnityTask<T> Run<T>(Func<IEnumerator> p_toRun)
+        /// <typeparam name="T">The result type of the task.</typeparam>
+        /// <param name="p_result"></param>
+        /// <returns>A completed task.</returns>
+        public static UnityTask FromException(Exception p_exception)
         {
-            return UnityTask.Factory.StartNew<T>(p_toRun);
-        }
-
-        /// <summary>
-        /// Executes an action asynchronously, returning a task that represents the operation.
-        /// </summary>
-        /// <param name="p_toRun">The action to run.</param>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        public static UnityTask Run(Func<IEnumerator> p_toRun)
-        {
-            return UnityTask.Factory.StartNew<object>(p_toRun);
+            var tcs = new UnityTaskCompletionSource<int>();
+            tcs.SetException(p_exception);
+            return tcs.Task;
         }
 
         /// <summary>
@@ -543,7 +594,17 @@
                     cancellation.Dispose();
                 }
             };
-            tcs.Task.TaskCoroutine = UnityTaskScheduler.FromCurrentSynchronizationContext().Post(tcs.Task.TaskGenerator(), tcs.Task.ReturnResult);
+            if (Thread.CurrentThread.IsBackground)// 如果当前不在前端线程，则切换
+            {
+                ForegroundInvoker.Invoke(() =>
+                {
+                    tcs.Task.TaskCoroutine = UnityTaskScheduler.FromCurrentSynchronizationContext().Post(tcs.Task.TaskGenerator(), tcs.Task.ReturnResult);
+                });
+            }
+            else
+            {
+                tcs.Task.TaskCoroutine = UnityTaskScheduler.FromCurrentSynchronizationContext().Post(tcs.Task.TaskGenerator(), tcs.Task.ReturnResult);
+            }
             return tcs.Task;
         }
 

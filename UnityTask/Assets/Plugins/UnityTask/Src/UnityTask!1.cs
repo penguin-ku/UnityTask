@@ -5,6 +5,7 @@
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
+    using UnityEngine.Processor;
 
     /// <summary>
     /// Represents an asynchronous task that has a result.
@@ -12,6 +13,14 @@
     /// <typeparam name="T">The type of the task's result.</typeparam>
     public sealed class UnityTask<T> : UnityTask
     {
+        public new static UnityTask<T> None
+        {
+            get
+            {
+                return UnityTask.FromResult<T>(default(T));
+            }
+        }
+
         #region private members
 
         private T result;
@@ -49,10 +58,83 @@
         /// The function takes the completed task as an argument.</param>
         /// <returns>A new Task that is complete after both the task and the continuation are
         /// complete.</returns>
-        public void ContinueWith(Action<UnityTask<T>> p_continuation)
+        public UnityTask<UnityTask<T2>> ContinueWith<T2>(Func<UnityTask<T>, UnityTask<T2>> p_continuation)
         {
-            base.ContinueWith(t => p_continuation((UnityTask<T>)t));
+            return base.ContinueWith(t => p_continuation((UnityTask<T>)t));
         }
+
+        /// <summary>
+        /// Registers a continuation for the task that will run when the task is complete.
+        /// </summary>
+        /// <param name="continuation">The continuation to run after the task completes.
+        /// The function takes the completed task as an argument.</param>
+        /// <returns>A new Task that is complete after both the task and the continuation are
+        /// complete.</returns>
+        public UnityTask<UnityTask> ContinueWith(Func<UnityTask<T>, UnityTask> p_continuation)
+        {
+            return base.ContinueWith(t => p_continuation((UnityTask<T>)t));
+        }
+
+        /// <summary>
+        /// Registers a continuation for the task that will run when the task is complete.
+        /// </summary>
+        /// <param name="continuation">The continuation to run after the task completes.
+        /// The function takes the completed task as an argument.</param>
+        /// <returns>A new Task that is complete after both the task and the continuation are
+        /// complete.</returns>
+        public UnityTask ContinueWith(Action<UnityTask<T>> p_continuation)
+        {
+            return base.ContinueWith(t =>
+            {
+                //if (t.IsFaulted)
+                //{
+                //    return UnityTask.FromException<int>(t.Exception);
+                //}
+                //else
+                //{
+                    try
+                    {
+                        p_continuation((UnityTask<T>)t);
+                        return UnityTask.FromResult(0);
+                    }
+                    catch (Exception ex)
+                    {
+                        return UnityTask.FromException<int>(ex);
+                    }
+                //}
+            });
+        }
+
+        /// <summary>
+        /// Registers a continuation for the task that will run when the task is complete.
+        /// </summary>
+        /// <param name="continuation">The continuation to run after the task completes.
+        /// The function takes the completed task as an argument.</param>
+        /// <returns>A new Task that is complete after both the task and the continuation are
+        /// complete.</returns>
+        public UnityTask<T2> ContinueWith<T2>(Func<UnityTask<T>, T2> p_continuation)
+        {
+            return base.ContinueWith(t =>
+            {
+                //if (t.IsFaulted)
+                //{
+                //    return UnityTask.FromException<T2>(t.Exception);
+                //}
+                //else
+                //{
+                    try
+                    {
+                        T2 result = p_continuation((UnityTask<T>)t);
+                        return UnityTask.FromResult(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        return UnityTask.FromException<T2>(ex);
+                    }
+                //}
+            }).Unwrap();
+        }
+
 
         /// <summary>
         /// Registers a continuation for the task that will run when the task is complete.
@@ -62,7 +144,7 @@
         /// The function takes the completed task as an argument and can return a value.</param>
         /// <returns>A new Task that returns the value returned by the continuation after both
         /// the task and the continuation are complete.</returns>
-        public UnityTask<TResult> ContinueWith<TResult>(Func<UnityTask<T>, IEnumerator> continuation)
+        public UnityTask<UnityTask<TResult>> ContinueWith<TResult>(Func<UnityTask<T>, IEnumerator> continuation)
         {
             return base.ContinueWith<TResult>(t => continuation((UnityTask<T>)t));
         }
@@ -75,9 +157,9 @@
         /// The function takes the completed task as an argument and can return a value.</param>
         /// <returns>A new Task that returns the value returned by the continuation after both
         /// the task and the continuation are complete.</returns>
-        public UnityTask ContinueWith(Func<UnityTask<T>, IEnumerator> continuation)
+        public UnityTask<UnityTask> ContinueWith(Func<UnityTask<T>, IEnumerator> continuation)
         {
-            return base.ContinueWith<object>(t => continuation((UnityTask<T>)t));
+            return base.ContinueWith(t => continuation((UnityTask<T>)t));
         }
 
         #endregion
@@ -89,15 +171,26 @@
         /// </summary>
         private void RunContinuations()
         {
-            foreach (var continuation in m_continuationTasks)
+            if (Thread.CurrentThread.IsBackground)
             {
-                UnityTaskScheduler.FromCurrentSynchronizationContext().Post(continuation.TaskGenerator(), continuation.ReturnResult);
+                var continueActions = m_continuationActions.ToList();
+                ForegroundInvoker.Invoke(() =>
+                {
+                    foreach (var item in continueActions)
+                    {
+                        item(this);
+                    }
+                });
+                m_continuationActions.Clear();
             }
-            foreach (var item in m_continuationActions)
+            else
             {
-                item(this);
+                foreach (var item in m_continuationActions)
+                {
+                    item(this);
+                }
+                m_continuationActions.Clear();
             }
-            m_continuationTasks.Clear();
         }
 
         #endregion

@@ -12,9 +12,14 @@
     {
         #region private members
 
-        private static UnityTaskScheduler g_defaultContext;                                                      // 默认的上下文
+        private static UnityTaskScheduler g_defaultContext = new UnityTaskScheduler();                                                      // 默认的上下文
 
         #endregion
+
+        private void Start()
+        {
+            DontDestroyOnLoad(this.gameObject);
+        }
 
         #region public functions
 

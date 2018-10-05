@@ -227,7 +227,7 @@
         /// <param name="p_tasks"></param>
         /// <param name="p_continuationAction"></param>
         /// <returns></returns>
-        public UnityTask<T> ContinueWhenAll<T>(UnityTask[] p_tasks, Func<UnityTask[], System.Collections.IEnumerator> p_continuationAction)
+        public UnityTask<UnityTask<T>> ContinueWhenAll<T>(UnityTask[] p_tasks, Func<UnityTask[], System.Collections.IEnumerator> p_continuationAction)
         {
             int remaining = p_tasks.Length;
             var tcs = new UnityTaskCompletionSource<UnityTask[]>();

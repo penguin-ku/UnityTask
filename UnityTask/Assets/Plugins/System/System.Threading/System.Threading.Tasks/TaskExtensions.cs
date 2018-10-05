@@ -383,7 +383,7 @@
         /// <param name="list2"></param>
         /// <param name="zipper"></param>
         /// <returns></returns>
-        internal static IEnumerable<TResult> Zip<T1, T2, TResult>(this IEnumerable<T1> list1, IEnumerable<T2> list2, Func<T1, T2, TResult> zipper)
+        public static IEnumerable<TResult> Zip<T1, T2, TResult>(this IEnumerable<T1> list1, IEnumerable<T2> list2, Func<T1, T2, TResult> zipper)
         {
             var e1 = list1.GetEnumerator();
             var e2 = list2.GetEnumerator();
@@ -399,7 +399,7 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        internal static Task OnSuccess(this Task p_task, Action<Task> p_continuation)
+        public static Task OnSuccess(this Task p_task, Action<Task> p_continuation)
         {
             return p_task.OnSuccess<object>(t =>
             {
@@ -415,7 +415,7 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        internal static Task<TResult> OnSuccess<TResult>(this Task p_task, Func<Task, TResult> p_continuation)
+        public static Task<TResult> OnSuccess<TResult>(this Task p_task, Func<Task, TResult> p_continuation)
         {
             return p_task.ContinueWith(t =>
             {
@@ -449,7 +449,7 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        internal static Task OnSuccess<TIn>(this Task<TIn> p_task, Action<Task<TIn>> p_continuation)
+        public static Task OnSuccess<TIn>(this Task<TIn> p_task, Action<Task<TIn>> p_continuation)
         {
             return p_task.OnSuccess<TIn, object>(t =>
             {
@@ -466,7 +466,7 @@
         /// <param name="p_task"></param>
         /// <param name="p_continuation"></param>
         /// <returns></returns>
-        internal static Task<TResult> OnSuccess<TIn, TResult>(this Task<TIn> p_task, Func<Task<TIn>, TResult> p_continuation)
+        public static Task<TResult> OnSuccess<TIn, TResult>(this Task<TIn> p_task, Func<Task<TIn>, TResult> p_continuation)
         {
             return p_task.OnSuccess((Task t) => p_continuation((Task<TIn>)t));
         }

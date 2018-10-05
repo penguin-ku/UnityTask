@@ -65,9 +65,17 @@ namespace UnityEngine.Processor
         {
             if (g_instance == null)
             {
-                throw new Exception("foreground invoker未初始化");
+                //throw new Exception("foreground invoker未初始化");
+                return;
             }
-            g_instance.m_actionQueue.Enqueue(p_action);
+            if (!System.Threading.Thread.CurrentThread.IsBackground)// 如果当前是前台线程。则直接处理
+            {
+                p_action();
+            }
+            else
+            {
+                g_instance.m_actionQueue.Enqueue(p_action);
+            }
         }
 
         #endregion

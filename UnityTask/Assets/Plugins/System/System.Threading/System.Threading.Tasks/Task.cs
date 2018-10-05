@@ -208,7 +208,17 @@
             }
             if (completed)
             {
-                completeTask(this);
+                if (Thread.CurrentThread.IsBackground)
+                {
+                    completeTask(this);
+                }
+                else
+                {
+                    ThreadPool.QueueUserWorkItem(new WaitCallback(p => 
+                    {
+                        completeTask(this);
+                    }));
+                }
             }
 
             return tcs.Task;
